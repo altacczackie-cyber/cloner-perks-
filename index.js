@@ -1,6 +1,7 @@
-const { Client } = require('discord.js-selfbot-v13');
+const { Client, GatewayIntentBits } = require('discord.js');
 const axios = require('axios');
 const http = require('http');
+const FormData = require('form-data');
 
 // ========== CONFIGURA QUI ==========
 const CONFIG = {
@@ -22,7 +23,14 @@ http.createServer((req, res) => {
     console.log(`✅ Server on port ${CONFIG.PORT}`);
 });
 
-const client = new Client({ checkUpdate: false });
+// ========== DISCORD CLIENT ==========
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
 
 // ========== UTILITY ==========
 function sleep(ms) {
@@ -124,7 +132,7 @@ async function clonaStruttura() {
             await sleep(300);
             
         } catch (err) {
-            console.log(`  ❌ ${canale.name}`);
+            console.log(`  ❌ ${canale.name}: ${err.message}`);
         }
     }
     
@@ -158,7 +166,7 @@ async function creaWebhookGrindr() {
             await sleep(400);
             
         } catch (err) {
-            console.log(`  ⚠️  ${canale.name}`);
+            console.log(`  ⚠️  ${canale.name}: ${err.message}`);
         }
     }
     
@@ -166,9 +174,9 @@ async function creaWebhookGrindr() {
     return webhookMap;
 }
 
-// ========== 4. UPLOAD CON WEBHOOK E RINOMINA ==========
+// ========== 4. UPLOAD E RINOMINA A "GRINDR" ==========
 async function uploadConWebhook(mappaCanali, webhookMap) {
-    console.log('📤 UPLOAD E RINOMINA FILE...');
+    console.log('📤 UPLOAD E RINOMINA FILE A "GRINDR"...');
     
     const source = client.guilds.cache.get(CONFIG.SOURCE_GUILD_ID);
     let fileTotali = 0;
@@ -214,11 +222,18 @@ async function uploadConWebhook(mappaCanali, webhookMap) {
                         });
                         
                         // Upload via webhook con nuovo nome
-                        await uploadFileViaWebhook(
-                            Buffer.from(response.data),
-                            nuovoNome,
-                            webhookData
-                        );
+                        const form = new FormData();
+                        form.append('file', Buffer.from(response.data), {
+                            filename: nuovoNome,
+                            contentType: allegato.contentType || 'application/octet-stream'
+                        });
+                        
+                        const webhookUrl = `https://discord.com/api/webhooks/${webhookData.id}/${webhookData.token}`;
+                        
+                        await axios.post(webhookUrl, form, {
+                            headers: form.getHeaders(),
+                            timeout: 30000
+                        });
                         
                         fileInCanale++;
                         fileTotali++;
@@ -229,7 +244,7 @@ async function uploadConWebhook(mappaCanali, webhookMap) {
                         await sleep(500); // Rate limit
                         
                     } catch (err) {
-                        console.log(`  ⚠️  Errore file: ${allegato.name}`);
+                        console.log(`  ⚠️  Errore file: ${err.message}`);
                     }
                 }
                 
@@ -247,46 +262,6 @@ async function uploadConWebhook(mappaCanali, webhookMap) {
     
     console.log(`\n🎉 UPLOAD COMPLETATO!`);
     console.log(`📊 File totali rinominati: ${fileTotali}`);
-}
-
-// ========== UPLOAD FILE VIA WEBHOOK ==========
-async function uploadFileViaWebhook(fileBuffer, filename, webhookData) {
-    try {
-        const FormData = require('form-data');
-        const form = new FormData();
-        
-        form.append('file', fileBuffer, {
-            filename: filename,
-            contentType: 'application/octet-stream'
-        });
-        
-        const webhookUrl = `https://discord.com/api/webhooks/${webhookData.id}/${webhookData.token}`;
-        
-        await axios.post(webhookUrl, form, {
-            headers: form.getHeaders(),
-            timeout: 30000
-        });
-        
-        return true;
-        
-    } catch (err) {
-        // Fallback: prova con URL diretto per file piccoli
-        try {
-            // Converti buffer a data URL
-            const base64 = fileBuffer.toString('base64');
-            const dataUrl = `data:image/jpeg;base64,${base64}`;
-            
-            await axios.post(webhookData.url, {
-                username: 'GRINDR UPLOADER',
-                avatar_url: 'https://cdn.discordapp.com/attachments/1100949263778099320/1183822206778728528/grindr-logo-1.png',
-                content: dataUrl
-            });
-            
-            return true;
-        } catch {
-            throw new Error('Upload fallito');
-        }
-    }
 }
 
 // ========== AVVIO AUTOMATICO ==========
@@ -330,4 +305,4 @@ client.login(CONFIG.TOKEN).catch(err => {
     console.error('❌ LOGIN FALLITO:', err.message);
     console.log('\n⚠️  Controlla token e server IDs!');
     process.exit(1);
-}); 
+});
